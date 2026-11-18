@@ -1,0 +1,236 @@
+diff --git a/src/gateway/server-methods/sessions-abort-reply.ts b/src/gateway/server-methods/sessions-abort-reply.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..b457098c3a90c83a4a7d5987c4f5d4273f0f1169
+--- /dev/null
++++ b/src/gateway/server-methods/sessions-abort-reply.ts
+@@ -0,0 +1,35 @@
++import {
++  isReplyOperationForSession,
++  replyRunRegistry,
++  resolveReplyOperationsForSession,
++} from "../../auto-reply/reply/reply-run-registry.js";
++
++/** Capture startup before queued cancellation can replace or move its reply owner. */
++export function captureSessionReplyAbort(
++  target: Parameters<typeof resolveReplyOperationsForSession>[0],
++  assertCurrent: () => void,
++): () => boolean {
++  const captured = resolveReplyOperationsForSession(target).map((operation) => ({
++    operation,
++    key: operation.key,
++    sessionId: operation.sessionId,
++    agentId: operation.agentId,
++  }));
++  return () => {
++    let cancelled = false;
++    for (const owner of captured) {
++      assertCurrent();
++      const { operation, key, sessionId, agentId } = owner;
++      if (
++        replyRunRegistry.get(key) === operation &&
++        operation.key === key &&
++        operation.sessionId === sessionId &&
++        operation.agentId === agentId &&
++        isReplyOperationForSession(target, operation)
++      ) {
++        cancelled = operation.abortByUser() || cancelled;
++      }
++    }
++    return cancelled;
++  };
++}
+diff --git a/src/gateway/server-methods/sessions-abort.ts b/src/gateway/server-methods/sessions-abort.ts
+index 5c27460878ccccf6a41435f4c98bf7e201f53422..5499c6f6da3416f163c0ab5a2c114ab522caaa0d 100644
+--- a/src/gateway/server-methods/sessions-abort.ts
++++ b/src/gateway/server-methods/sessions-abort.ts
+@@ -62,6 +62,7 @@ import {
+   bindGatewayRequestHandlerMutationAuthority,
+   readGatewayRequestMutationAuthority,
+ } from "./session-mutation-guards.js";
++import { captureSessionReplyAbort } from "./sessions-abort-reply.js";
+ import { requireSessionKey } from "./sessions-shared.js";
+ import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
+ import { assertValidParams } from "./validation.js";
+@@ -472,6 +473,20 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
+     const embeddedController = sessionEmbeddedRun
+       ? preAbortRuns.get(sessionEmbeddedRun.runId)
+       : undefined;
++    // Startup has a reply owner before its embedded handle exists. Capture only
++    // the admitted incarnation; queued cancellation must not discover a successor.
++    const abortStartupReply =
++      narrow && !requestedRunId && persistedSessionId && !sessionEmbeddedRun
++        ? captureSessionReplyAbort(
++            {
++              sessionKeys: [key, canonicalKey],
++              sessionId: persistedSessionId,
++              agentId: targetAgentId,
++              defaultAgentId: stableTargetOwner,
++            },
++            assertAbortCurrent,
++          )
++        : undefined;
+     const yieldedRunId = normalizeOptionalString(sessionEntry?.lifecycleRunId);
+     const yieldedParent =
+       !requestedRunId &&
+@@ -549,7 +564,9 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
+               persistedSessionId && canonicalKey !== "global" && !embeddedController
+                 ? sessionEmbeddedRun
+                   ? sessionEmbeddedRun.abort()
+-                  : !narrow && abortEmbeddedAgentRun(persistedSessionId)
++                  : narrow
++                    ? (abortStartupReply?.() ?? false)
++                    : abortEmbeddedAgentRun(persistedSessionId)
+                 : false;
+             if (embeddedAborted && sessionEmbeddedRun) {
+               embeddedAbortPersistence = persistSessionAbort(sessionEmbeddedRun);
+diff --git a/src/gateway/server-methods/sessions.abort-startup.test.ts b/src/gateway/server-methods/sessions.abort-startup.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..2598353a7cb09a47d4bb464c799702013f0b9d45
+--- /dev/null
++++ b/src/gateway/server-methods/sessions.abort-startup.test.ts
+@@ -0,0 +1,145 @@
++/** Scoped Stop must reach channel startup before an embedded handle exists. */
++// Preserve module setup before modules that consume it.
++// oxfmt-ignore
++import { useChatAbortRegistryFixture } from "./chat.abort-registry.test-support.js";
++import { expect, it, vi } from "vitest";
++import { createReplyOperation } from "../../auto-reply/reply/reply-run-registry.operation.js";
++import { getRuntimeConfig, setRuntimeConfigSnapshot } from "../../config/config.js";
++import * as sessions from "../../config/sessions/session-accessor.js";
++import { createDirectChatContext } from "../server-chat.agent-events.test-helpers.js";
++import { handleGatewayRequest } from "../server-methods.js";
++import { roleClient, rolePolicyConfig } from "../session-sharing.test-utils.js";
++import { createActiveRun } from "./chat.abort.test-helpers.js";
++import { sessionAbortHandlers } from "./sessions-abort.js";
++
++useChatAbortRegistryFixture();
++const sessionKey = "agent:main:direct:startup-stop";
++const sessionId = "startup-stop-session";
++
++async function setup() {
++  const client = roleClient("view", "startup-stop-owner");
++  client.connect.scopes = ["operator.sessions.write"];
++  const cfg = { ...getRuntimeConfig(), ...rolePolicyConfig() };
++  setRuntimeConfigSnapshot(cfg);
++  await sessions.upsertSessionEntryCore(
++    { agentId: "main", sessionKey },
++    {
++      sessionId,
++      updatedAt: 1,
++      createdActor: {
++        type: "human",
++        source: "profile",
++        id: client.authenticatedUserProfile!.profileId,
++      },
++    },
++  );
++  const context = createDirectChatContext({ getRuntimeConfig: () => cfg });
++  const stop = async () => {
++    const respond = vi.fn();
++    await handleGatewayRequest({
++      req: {
++        type: "req",
++        id: "startup-stop",
++        method: "sessions.abort",
++        params: { key: sessionKey, clearQueued: false },
++      },
++      client,
++      context,
++      respond,
++      isWebchatConnect: () => false,
++      extraHandlers: { "sessions.abort": sessionAbortHandlers["sessions.abort"]! },
++    });
++    return respond;
++  };
++  return { client, context, stop };
++}
++
++it.each(["matched", "old-incarnation", "foreign-key", "foreign-agent", "finalizing"] as const)(
++  "scoped Stop cancels only its admitted reply-only startup (%s)",
++  async (target) => {
++    const { stop } = await setup();
++    const operation = createReplyOperation({
++      sessionKey: target === "foreign-key" ? "agent:main:direct:other" : sessionKey,
++      sessionId: target === "old-incarnation" ? "old-startup-session" : sessionId,
++      agentId: target === "foreign-agent" ? "other" : "main",
++      resetTriggered: false,
++    });
++    const peer = createReplyOperation({
++      sessionKey: "agent:main:direct:healthy-peer",
++      sessionId: "healthy-peer-session",
++      agentId: "main",
++      resetTriggered: false,
++    });
++    if (target === "finalizing") {
++      operation.freezeAbort();
++    }
++    try {
++      const respond = await stop();
++      expect(respond).toHaveBeenCalledOnce();
++      expect(respond.mock.calls[0]?.slice(0, 2)).toEqual([
++        true,
++        {
++          ok: true,
++          abortedRunId: null,
++          status: target === "matched" ? "aborted" : "no-active-run",
++        },
++      ]);
++      expect(operation.abortSignal.aborted).toBe(target === "matched");
++      expect(peer.abortSignal.aborted).toBe(false);
++    } finally {
++      operation.complete();
++      peer.complete();
++    }
++  },
++);
++
++it.each(["replacement", "rebound"])(
++  "scoped Stop does not cancel a %s reply after queued cancellation",
++  async (change) => {
++    const { client, context, stop } = await setup();
++    const original = createReplyOperation({
++      sessionKey,
++      sessionId,
++      agentId: "main",
++      resetTriggered: false,
++    });
++    let replacement: ReturnType<typeof createReplyOperation> | undefined;
++    const queued = createActiveRun(sessionKey, {
++      sessionId,
++      agentId: "main",
++      owner: { connId: client.connId },
++    });
++    context.chatQueuedTurns.set("original-queued", queued);
++    queued.controller.signal.addEventListener(
++      "abort",
++      () => {
++        if (change === "rebound") {
++          original.updateSessionId("new-startup-session");
++          return;
++        }
++        original.complete();
++        replacement = createReplyOperation({
++          sessionKey,
++          sessionId,
++          agentId: "main",
++          resetTriggered: false,
++        });
++      },
++      { once: true },
++    );
++    try {
++      await stop();
++      expect(queued.controller.signal.aborted).toBe(true);
++      if (change === "replacement") {
++        expect(replacement).toBeDefined();
++        expect(replacement!.abortSignal.aborted).toBe(false);
++      } else {
++        expect(original.sessionId).toBe("new-startup-session");
++        expect(original.abortSignal.aborted).toBe(false);
++      }
++    } finally {
++      original.complete();
++      replacement?.complete();
++    }
++  },
++);

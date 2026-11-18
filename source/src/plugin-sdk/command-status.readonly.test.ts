@@ -1,0 +1,369 @@
+/**
+ * Seam regression: real model-selection and direct-status owners, synthetic
+ * catalog/policy/auth/session/renderer boundaries. No CLI, database, or live auth.
+ * The isolated replay uses a minimal Vitest registration adapter, not Vitest itself.
+ */
+import assert from "node:assert/strict";
+import { beforeEach, it, vi } from "vitest";
+import type { SessionEntry } from "../config/sessions/types.js";
+import type { OpenClawConfig } from "../config/types.openclaw.js";
+
+const fixture = vi.hoisted(() => ({
+  effects: [] as string[],
+  entry: {} as SessionEntry,
+  store: {} as Record<string, SessionEntry>,
+  cfg: { agents: { defaults: {} } } as OpenClawConfig,
+  catalog: [{ provider: "fixture-provider", id: "primary", name: "Synthetic primary" }],
+  rendered: [] as Array<{ provider: string; model: string }>,
+}));
+
+// mock-isolation: No provider package or discovery runtime enters this seam.
+vi.mock("@openclaw/model-catalog-core/model-catalog-refs", () => ({
+  buildModelCatalogRef: (provider: string, model: string) => `${provider}/${model}`,
+}));
+// mock-isolation: No admitted run is created by this offline status fixture.
+vi.mock("../agents/admitted-run-context.js", () => ({
+  assertAdmittedRunOperatorAuthority: () => { throw new Error("unexpected admitted run"); },
+  assertOperatorModelAllowed: (authority: unknown) => assert.equal(authority, undefined),
+}));
+// mock-isolation: Use a synthetic agent without host paths or configuration discovery.
+vi.mock("../agents/agent-scope.js", () => ({
+  hasLegacyAutoFallbackWithoutOrigin: () => false,
+  resolveAgentConfig: () => undefined,
+  resolveAgentDir: () => "synthetic-agent",
+  listAgentEntries: () => [],
+  resolveSessionAgentId: () => "main",
+}));
+// mock-isolation: No real credentials or auth-store initialization may be reached.
+vi.mock("../agents/auth-profiles.runtime.js", () => ({
+  ensureAuthProfileStore: () => {
+    fixture.effects.push("ensure-auth-store");
+    return { version: 1, profiles: {} };
+  },
+  prepareAuthProfileProvider: async () => {
+    fixture.effects.push("prepare-auth-provider");
+    return { provider: "other-fixture-provider" };
+  },
+}));
+// mock-isolation: This fixture deliberately supplies no compatible stored credential.
+vi.mock("../agents/auth-profiles/order.js", () => ({
+  isStoredCredentialCompatibleWithAuthProvider: () => false,
+}));
+// mock-isolation: Auth persistence is an in-memory effect, never a real store write.
+vi.mock("../agents/auth-profiles/session-override.js", () => ({
+  clearSessionAuthProfileOverride: async (params: {
+    sessionEntry: SessionEntry;
+    assertCommitAllowed: () => void;
+  }) => {
+    params.assertCommitAllowed();
+    fixture.effects.push("clear-auth-override");
+    delete params.sessionEntry.authProfileOverride;
+    delete params.sessionEntry.authProfileOverrideSource;
+  },
+}));
+// mock-isolation: No runtime admission or plugin harness is loaded.
+vi.mock("../agents/harness/policy.js", () => ({
+  resolveAgentHarnessPolicy: () => ({ runtime: "openclaw" }),
+}));
+// mock-isolation: Auth routing consumes only this synthetic config.
+vi.mock("../agents/model-auth-provider-route.js", () => ({
+  resolveModelProviderAuthConfig: ({ config }: { config: OpenClawConfig }) => config,
+}));
+// mock-isolation: Literal fixture models need no provider/plugin normalization.
+vi.mock("../agents/model-selection.js", () => ({
+  normalizeProviderId: (provider: string) => provider,
+  normalizeModelRef: (provider: string, model: string) => ({ provider, model }),
+  resolveModelAliasFromPair: () => null,
+  resolveThinkingDefault: () => "off",
+  resolveReasoningDefault: () => "off",
+  resolveDefaultModelForAgent: () => ({ provider: "fixture-provider", model: "primary" }),
+}));
+// mock-isolation: Avoid provider-specific thinking-policy loading.
+vi.mock("../agents/model-thinking-default.js", () => ({
+  resolveConfiguredThinkingDefault: () => "off",
+}));
+// mock-isolation: The fixture policy allows primary and rejects blocked, with no discovery.
+vi.mock("../agents/model-visibility-policy.js", () => ({
+  createModelVisibilityPolicy: () => ({
+    allowAny: false,
+    hasProviderWildcards: false,
+    configuredCatalog: fixture.catalog,
+    catalog: fixture.catalog,
+    allowedCatalog: fixture.catalog,
+    allowedKeys: new Set(["fixture-provider/primary"]),
+    allowsByWildcard: () => false,
+    allows: ({ model }: { model: string }) => model === "primary",
+    resolveSelection: ({ provider, model }: { provider: string; model: string }) => ({
+      provider,
+      model: model === "blocked" ? "primary" : model,
+    }),
+  }),
+}));
+// mock-isolation: No subscription route or provider registration is consulted.
+vi.mock("../agents/openai-routing.js", () => ({
+  OPENAI_CODEX_PROVIDER_ID: "openai-codex",
+  OPENAI_PROVIDER_ID: "openai",
+  listOpenAIAuthProfileProvidersForAgentRuntime: () => ["fixture-provider"],
+}));
+// mock-isolation: No operator override is present in this fixture.
+vi.mock("../agents/operator-model-policy.js", () => ({
+  resolveOperatorModelDefault: ({ model }: { model: { provider: string; model: string } }) => model,
+}));
+// mock-isolation: No real runtime or session resolver is loaded.
+vi.mock("../agents/thinking-runtime.js", () => ({
+  resolveEffectiveAgentRuntime: () => "openclaw",
+}));
+// mock-isolation: The auth test is an explicit missing pin, not an automatic/personal pin.
+vi.mock("../config/sessions/auth-profile-override-provenance.js", () => ({
+  resolveCollapsedSessionAuthPinSource: (entry: SessionEntry) => entry.authProfileOverrideSource,
+}));
+// mock-isolation: Avoid lifecycle runtime initialization; retain failure semantics.
+vi.mock("../config/sessions/lifecycle.js", () => ({
+  SessionWorkStartInvalidatedError: class extends Error {},
+}));
+// mock-isolation: Automatic selection is outside the fixture.
+vi.mock("../config/sessions/model-override-provenance.js", () => ({
+  hasSessionAutoModelSelection: () => false,
+}));
+// mock-isolation: Persistence returns the submitted snapshot, without a database.
+vi.mock("../config/sessions/session-snapshot-merge.js", () => ({
+  sessionModelOverrideChangesApplied: () => true,
+  adoptPersistedSessionSnapshot: (target: SessionEntry, next: SessionEntry) => {
+    for (const key of Object.keys(target)) {
+      Reflect.deleteProperty(target, key);
+    }
+    Object.assign(target, next);
+  },
+}));
+// mock-isolation: No environment or host diagnostic configuration is read.
+vi.mock("../infra/diagnostic-flags.js", () => ({ isDiagnosticFlagEnabled: () => false }));
+// mock-isolation: Missing credentials are deliberately non-preservable for the auth branch.
+vi.mock("../sessions/auth-profile-preservation.js", () => ({
+  shouldPreserveUnavailableSessionAuthProfileOverride: () => false,
+}));
+// mock-isolation: Model/auth reset effects stay on the test-owned in-memory snapshot.
+vi.mock("../sessions/model-overrides.js", () => ({
+  applyModelOverrideToSessionEntry: ({ entry }: { entry: SessionEntry }) => {
+    fixture.effects.push("apply-model-reset");
+    delete entry.providerOverride;
+    delete entry.modelOverride;
+    delete entry.modelOverrideSource;
+    delete entry.authProfileOverride;
+    delete entry.authProfileOverrideSource;
+    return { updated: true };
+  },
+}));
+// mock-isolation: Resolve only the direct synthetic pin, with no parent/session reads.
+vi.mock("../sessions/stored-model-overrides.js", () => ({
+  resolveStoredModelOverrideCore: ({ sessionEntry }: { sessionEntry?: SessionEntry }) =>
+    sessionEntry?.modelOverride
+      ? {
+          source: "session",
+          provider: sessionEntry.providerOverride,
+          model: sessionEntry.modelOverride,
+          routeResolution: "resolved",
+        }
+      : null,
+}));
+// mock-isolation: The lazy loader can invoke only the explicit mocked runtime imports below.
+vi.mock("../shared/lazy-promise.js", () => ({
+  createLazyImportLoader: (load: () => Promise<unknown>) => ({ load }),
+}));
+// mock-isolation: No personal-account store is part of this fixture.
+vi.mock("../state/user-model-account-id.js", () => ({ isUserModelAuthProfileId: () => false }));
+// mock-isolation: Catalog normalization operates only on literal synthetic rows.
+vi.mock("../auto-reply/reply/model-runtime-normalization.js", () => ({
+  resolveRuntimeNormalization: () => ({ allowPluginNormalization: false, manifestPlugins: [] }),
+  mergePreparedConfiguredCatalog: ({ configured }: { configured: unknown[] }) => configured,
+  findSelectedCatalogEntry: (params: {
+    catalog: Array<{ provider: string; id: string }>;
+    provider: string;
+    model: string;
+  }) => params.catalog.find((entry) => entry.provider === params.provider && entry.id === params.model),
+}));
+// mock-isolation: These regressions concern a disallowed pin, not heartbeat staleness.
+vi.mock("../auto-reply/reply/stored-model-override.js", () => ({
+  isStaleHeartbeatAutoFallbackOverride: () => false,
+}));
+// mock-isolation: No model directive is dispatched by a direct status request.
+vi.mock("../auto-reply/reply/model-selection-directive.js", () => ({
+  resolveModelDirectiveSelection: () => { throw new Error("unexpected model directive"); },
+}));
+// mock-isolation: Catalog lookup is deterministic and never invokes provider discovery.
+vi.mock("../agents/model-catalog.runtime.js", () => ({
+  loadPreparedModelCatalogSnapshot: async () => ({ entries: fixture.catalog, authoritative: true }),
+  loadProviderScopedThinkingCatalog: async () => fixture.catalog,
+}));
+// mock-isolation: Capture persistence intent and return an in-memory committed snapshot.
+vi.mock("../auto-reply/reply/session-entry-persistence.js", () => ({
+  persistReplySessionEntry: async ({ entry }: { entry: SessionEntry }) => {
+    fixture.effects.push("persist-session");
+    return { status: "current", entry };
+  },
+}));
+// mock-isolation: Never load the live Gateway session database or config.
+vi.mock("../gateway/session-utils.js", () => ({
+  loadGatewaySessionEntryReadOnly: () => ({
+    cfg: fixture.cfg,
+    canonicalKey: "fixture-session",
+    entry: fixture.entry,
+    store: fixture.store,
+    storePath: "synthetic-session-store",
+  }),
+}));
+// mock-isolation: Default configuration is fixture-owned, with no plugin/default discovery.
+vi.mock("../auto-reply/reply/directive-handling.defaults.js", () => ({
+  resolveDefaultModel: () => ({ defaultProvider: "fixture-provider", defaultModel: "primary" }),
+}));
+// mock-isolation: Resolve the actual owner's thinking callback, without channel state.
+vi.mock("../auto-reply/reply/directive-handling.levels.js", () => ({
+  resolveCurrentDirectiveLevels: async (params: { resolveDefaultThinkingLevel: () => Promise<string> }) => ({
+    currentThinkLevel: await params.resolveDefaultThinkingLevel(),
+    currentFastMode: false,
+    currentVerboseLevel: "off",
+    currentReasoningLevel: "off",
+    currentElevatedLevel: "off",
+  }),
+}));
+// mock-isolation: Rendering records caller-visible selection without loading status subsystems.
+vi.mock("../auto-reply/reply/commands-status.js", () => ({
+  buildStatusReply: async ({ provider, model }: { provider: string; model: string }) => {
+    fixture.rendered.push({ provider, model });
+    return { text: `${provider}/${model}` };
+  },
+}));
+
+const { createModelSelectionState } = await import("../auto-reply/reply/model-selection.js");
+const { resolveDirectStatusReplyForSessionCore } = await import("./command-status.runtime.js");
+
+beforeEach(() => {
+  fixture.effects.length = 0;
+  fixture.rendered.length = 0;
+  fixture.entry = { sessionId: "synthetic-session", updatedAt: 1 };
+  fixture.store = { "fixture-session": fixture.entry };
+});
+
+function select(readOnly?: boolean) {
+  return createModelSelectionState({
+    cfg: fixture.cfg,
+    agentId: "main",
+    agentCfg: fixture.cfg.agents?.defaults,
+    sessionEntry: fixture.entry,
+    sessionStore: fixture.store,
+    sessionKey: "fixture-session",
+    storePath: "synthetic-session-store",
+    defaultProvider: "fixture-provider",
+    defaultModel: "primary",
+    provider: "fixture-provider",
+    model: fixture.entry.modelOverride ?? "primary",
+    hasModelDirective: false,
+    ...(readOnly === undefined ? {} : { readOnly }),
+  });
+}
+
+function pinBlockedModel() {
+  Object.assign(fixture.entry, {
+    providerOverride: "fixture-provider",
+    modelOverride: "blocked",
+    modelOverrideSource: "user",
+  });
+}
+
+it("persistence: readonly preserves a disallowed stored pin without mutation or persistence", async () => {
+  pinBlockedModel();
+  const before = { ...fixture.entry };
+  const state = await select(true);
+  assert.deepEqual(fixture.effects, [], "readonly must not reset or persist the stored pin");
+  assert.deepEqual(fixture.entry, before);
+  assert.equal(fixture.store["fixture-session"], fixture.entry);
+  assert.equal(state.resetModelOverride, false);
+  assert.equal(state.provider, "fixture-provider");
+  assert.equal(state.model, "primary");
+});
+
+for (const mode of ["omitted", "false"] as const) {
+  it(`persistence: ordinary reply with readonly ${mode} still resets and persists a disallowed pin`, async () => {
+    pinBlockedModel();
+    const state = await select(mode === "false" ? false : undefined);
+    assert.deepEqual(fixture.effects, ["apply-model-reset", "persist-session"]);
+    assert.equal(fixture.entry.modelOverride, undefined);
+    assert.equal(fixture.entry.providerOverride, undefined);
+    assert.equal(fixture.store["fixture-session"], fixture.entry);
+    assert.equal(state.resetModelOverride, true);
+    assert.equal(state.resetModelOverrideReason, "disallowed");
+    assert.equal(state.model, "primary");
+  });
+}
+
+function pinMissingAuth() {
+  Object.assign(fixture.entry, {
+    authProfileOverride: "fixture-provider:missing",
+    authProfileOverrideSource: "user",
+  });
+}
+
+it("auth: readonly preserves an explicit missing auth pin without preparing or clearing it", async () => {
+  pinMissingAuth();
+  const before = { ...fixture.entry };
+  const state = await select(true);
+  assert.deepEqual(fixture.effects, [], "readonly must not load, prepare, or clear auth");
+  assert.deepEqual(fixture.entry, before);
+  assert.equal(fixture.store["fixture-session"], fixture.entry);
+  assert.equal(state.provider, "fixture-provider");
+  assert.equal(state.model, "primary");
+});
+
+for (const mode of ["omitted", "false"] as const) {
+  it(`auth: ordinary reply with readonly ${mode} still prepares and clears an ineligible auth pin`, async () => {
+    pinMissingAuth();
+    const state = await select(mode === "false" ? false : undefined);
+    assert.deepEqual(fixture.effects, [
+      "ensure-auth-store",
+      "prepare-auth-provider",
+      "clear-auth-override",
+    ]);
+    assert.equal(fixture.entry.authProfileOverride, undefined);
+    assert.equal(fixture.entry.authProfileOverrideSource, undefined);
+    assert.equal(fixture.store["fixture-session"], fixture.entry);
+    assert.equal(state.provider, "fixture-provider");
+    assert.equal(state.model, "primary");
+  });
+}
+
+function directStatus(sessionKey = " fixture-session ") {
+  return resolveDirectStatusReplyForSessionCore({
+    cfg: {},
+    sessionKey,
+    channel: "synthetic-channel",
+    senderIsOwner: true,
+    isAuthorizedSender: true,
+    isGroup: false,
+    defaultGroupActivation: () => "always",
+  });
+}
+
+for (const pin of ["disallowed-model", "missing-auth"] as const) {
+  it(`direct: status preserves ${pin} without auth or session side effects`, async () => {
+    pinMissingAuth();
+    if (pin === "disallowed-model") {
+      pinBlockedModel();
+    }
+    const before = { ...fixture.entry };
+    const result = await directStatus();
+    assert.deepEqual(fixture.effects, [], "direct status must request readonly model selection");
+    assert.deepEqual(fixture.entry, before);
+    assert.equal(fixture.store["fixture-session"], fixture.entry);
+    const model = pin === "disallowed-model" ? "blocked" : "primary";
+    assert.deepEqual(result, { text: `fixture-provider/${model}` });
+    assert.deepEqual(fixture.rendered, [{ provider: "fixture-provider", model }]);
+  });
+}
+
+it("direct: an empty session key still returns no status or side effects", async () => {
+  pinMissingAuth();
+  const before = { ...fixture.entry };
+  assert.equal(await directStatus("   "), undefined);
+  assert.deepEqual(fixture.effects, []);
+  assert.deepEqual(fixture.rendered, []);
+  assert.deepEqual(fixture.entry, before);
+});

@@ -1,0 +1,364 @@
+diff --git a/extensions/codex/src/app-server/attempt-startup.test-support.ts b/extensions/codex/src/app-server/attempt-startup.test-support.ts
+index 8c5474287ae454c6a86572a27d77c7678a902a1c..1925ee812469904b0a7dc934290c18f29882530f 100644
+--- a/extensions/codex/src/app-server/attempt-startup.test-support.ts
++++ b/extensions/codex/src/app-server/attempt-startup.test-support.ts
+@@ -65,6 +65,9 @@ export function createAttemptThreadStarter(
+       sandboxExecServerEnabled?: boolean;
+       runtime?: Parameters<typeof startCodexAttemptThread>[0]["runtime"];
+       appServer?: Parameters<typeof startCodexAttemptThread>[0]["appServer"];
++      onAcquireObservation?: Parameters<
++        typeof startCodexAttemptThread
++      >[0]["clientOptions"]["onAcquireObservation"];
+     },
+   ) {
+     const harness = overrides?.harness ?? createAttemptClientHarness();
+@@ -85,6 +88,7 @@ export function createAttemptThreadStarter(
+       pluginConfig: effectivePluginConfig,
+       computerUseConfig: resolveCodexComputerUseConfig({ pluginConfig: effectivePluginConfig }),
+       clientOptions: {
++        onAcquireObservation: overrides?.onAcquireObservation,
+         ...(overrides?.startupPreparedAuth
+           ? { preparedAuth: overrides.startupPreparedAuth }
+           : { authProfileId: undefined }),
+diff --git a/extensions/codex/src/app-server/attempt-startup.test.ts b/extensions/codex/src/app-server/attempt-startup.test.ts
+index 2cb44bec7ff7051c438a630d139c2c12939a44e5..4070dc934a0248e9dd4111e285a973aee6976112 100644
+--- a/extensions/codex/src/app-server/attempt-startup.test.ts
++++ b/extensions/codex/src/app-server/attempt-startup.test.ts
+@@ -2,7 +2,10 @@
+ import fs from "node:fs/promises";
+ import path from "node:path";
+ import { fileURLToPath } from "node:url";
+-import { AgentHarnessPreflightError } from "openclaw/plugin-sdk/agent-harness-runtime";
++import {
++  AgentHarnessPreflightError,
++  embeddedAgentLog,
++} from "openclaw/plugin-sdk/agent-harness-runtime";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import type { startCodexAttemptThread } from "./attempt-startup.js";
+ import {
+@@ -80,6 +83,7 @@ vi.mock("./computer-use.js", async (importOriginal) => {
+ const tempRoots = new Set<string>();
+ 
+ const pluginConfig: CodexPluginConfig = { appServer: { command: "codex" } };
++const timeoutMessage = "codex app-server startup timed out";
+ 
+ const startThreadWithHarness = createAttemptThreadStarter(tempRoots, pluginConfig);
+ 
+@@ -529,9 +533,10 @@ describe("startCodexAttemptThread", () => {
+       interval: 1,
+       timeout: 1_000,
+     });
+-    expect(error).toBeInstanceOf(Error);
+-    expect(isCodexAppServerStartupError(error, "timed_out")).toBe(true);
+-    expect((error as Error).message).toBe("codex app-server startup timed out");
++    expect(error).toBeInstanceOf(AgentHarnessPreflightError);
++    expect(error).toMatchObject({ scope: "harness" });
++    expect(isCodexAppServerStartupError((error as Error).cause, "timed_out")).toBe(true);
++    expect(((error as Error).cause as Error).message).toBe("codex app-server startup timed out");
+     expect(harness.stdinDestroyed).toBe(true);
+   });
+ 
+@@ -577,9 +582,10 @@ describe("startCodexAttemptThread", () => {
+       expect(kill).toHaveBeenCalledExactlyOnceWith("SIGKILL");
+ 
+       const error = await runError;
+-      expect(error).toBeInstanceOf(Error);
+-      expect(isCodexAppServerStartupError(error, "timed_out")).toBe(true);
+-      expect((error as Error).message).toBe(
++      expect(error).toBeInstanceOf(AgentHarnessPreflightError);
++      expect(error).toMatchObject({ scope: "harness" });
++      expect(isCodexAppServerStartupError((error as Error).cause, "timed_out")).toBe(true);
++      expect(((error as Error).cause as Error).message).toBe(
+         'codex app-server initialize timed out; stderr="Error: failed to initialize sqlite state runtime token=<redacted>"',
+       );
+       expect(harness.stdinDestroyed).toBe(true);
+@@ -799,11 +805,51 @@ describe("startCodexAttemptThread", () => {
+ 
+     const error = await runError;
+     expect(error).toBeInstanceOf(Error);
++    expect(error).not.toBeInstanceOf(AgentHarnessPreflightError);
+     expect(isCodexAppServerStartupError(error, "aborted")).toBe(true);
+     expect((error as Error).message).toBe("codex app-server startup aborted");
+     expect(harness.process.stdin.destroyed).toBe(true);
+   });
+ 
++  it("preserves caller cancellation during startup timeout cleanup", async () => {
++    vi.useFakeTimers();
++    const caller = new AbortController();
++    const cancellation = new Error("caller stopped startup");
++    const paths = createAttemptPaths(tempRoots);
++    const harness = createAttemptClientHarness();
++    const close = harness.client.closeAndWait.bind(harness.client);
++    vi.spyOn(harness.client, "closeAndWait").mockImplementation(async () => {
++      caller.abort(cancellation);
++      return await close();
++    });
++    const { run } = startThreadWithHarness(500, undefined, {
++      paths,
++      harness,
++      buildAttemptParams: () => ({ ...createAttemptParams(paths), abortSignal: caller.signal }),
++    });
++    const runError = run.catch((error: unknown) => error);
++    await answerInitialize(harness);
++    await waitForThreadStart(harness);
++    await vi.advanceTimersByTimeAsync(500);
++
++    expect(await runError).toBe(cancellation);
++    expect(harness.stdinDestroyed).toBe(true);
++  });
++
++  it("keeps a provider timeout eligible for model fallback", async () => {
++    const { harness, run } = startThreadWithHarness(5_000);
++    const runError = run.catch((error: unknown) => error);
++    await answerInitialize(harness);
++    const request = await waitForThreadStart(harness);
++    harness.send({ id: request.id, error: { code: 408, message: "model request timed out" } });
++
++    const error = await runError;
++    expect(error).not.toBeInstanceOf(AgentHarnessPreflightError);
++    expect(error).toMatchObject({ name: "CodexThreadStartRequestError" });
++    expect((error as Error).cause).toMatchObject({ code: 408, message: "model request timed out" });
++    expect(harness.stdinDestroyed).toBe(true);
++  });
++
+   it("continues with a deny-all apps patch when plugin discovery exceeds its shared deadline", async () => {
+     vi.useFakeTimers();
+     const deadlinePluginConfig = {
+@@ -869,4 +915,98 @@ describe("startCodexAttemptThread", () => {
+     expect((cause as Error).message).toBe("plugin/list timed out");
+     expect(harness.process.stdin.destroyed).toBe(true);
+   });
++
++  it.each(["initialize", "thread-lifecycle"] as const)(
++    "snapshots %s before timeout cleanup and warns once",
++    async (boundary) => {
++      vi.useFakeTimers();
++      const events: string[] = [];
++      const warn = vi.spyOn(embeddedAgentLog, "warn").mockImplementation(() => {
++        events.push("timeout");
++      });
++      const { harness, run } = startThreadWithHarness(500, undefined, {
++        onAcquireObservation: ({ boundary: observed }) => {
++          if (observed === "cleanup") {
++            events.push("cleanup");
++          }
++        },
++      });
++      const rejected = expect(run).rejects.toBeInstanceOf(AgentHarnessPreflightError);
++      if (boundary === "initialize") {
++        await waitForRequest(harness, "initialize");
++      } else {
++        await answerInitialize(harness);
++        await waitForThreadStart(harness);
++      }
++
++      await vi.advanceTimersByTimeAsync(500);
++      await rejected;
++      expect(warn).toHaveBeenCalledExactlyOnceWith(timeoutMessage, {
++        timeoutMs: 500,
++        stage: boundary === "initialize" ? "acquire-client" : "thread-lifecycle",
++        acquireLastObservedBoundary: boundary === "initialize" ? "initialize" : "ready",
++      });
++      expect(harness.stdinDestroyed).toBe(true);
++      if (boundary === "initialize") {
++        expect(events).toEqual(["timeout", "cleanup"]);
++      }
++    },
++  );
++
++  it("retains the last acquire boundary when cleanup already began", async () => {
++    vi.useFakeTimers();
++    const warn = vi.spyOn(embeddedAgentLog, "warn").mockImplementation(() => {});
++    const { run } = startThreadWithHarness(500, undefined, {
++      attemptClientFactory: () => async (options) => {
++        options?.onAcquireObservation?.({ boundary: "initialize" });
++        options?.onAcquireObservation?.({ boundary: "cleanup" });
++        options?.onAcquireObservation?.({ boundary: "cleanup" });
++        return await new Promise<never>((_resolve, reject) => {
++          options?.abandonSignal?.addEventListener("abort", () => reject(new Error("abandoned")), {
++            once: true,
++          });
++        });
++      },
++    });
++    const rejected = expect(run).rejects.toBeInstanceOf(AgentHarnessPreflightError);
++    await vi.advanceTimersByTimeAsync(500);
++    await rejected;
++    expect(warn).toHaveBeenCalledExactlyOnceWith(timeoutMessage, {
++      timeoutMs: 500,
++      stage: "acquire-client",
++      acquireLastObservedBoundary: "cleanup",
++      acquireBoundaryBeforeCleanup: "initialize",
++    });
++  });
++
++  it("does not let an existing acquire observer prevent startup", async () => {
++    const observer = vi.fn(() => {
++      throw new Error("diagnostic observer unavailable");
++    });
++    const { harness, run } = startThreadWithHarness(5_000, undefined, {
++      onAcquireObservation: observer,
++    });
++    await answerInitialize(harness);
++    const start = await waitForThreadStart(harness);
++    harness.send({ id: start.id, result: threadStartResult("thread-diagnostics") });
++    const result = await run;
++    expect(observer).toHaveBeenCalled();
++    expect(result.thread.threadId).toBe("thread-diagnostics");
++    result.turnRoute.release();
++    result.releaseSharedClientLease();
++  });
++
++  it("does not let a failed warning bypass timeout cleanup", async () => {
++    vi.useFakeTimers();
++    const warn = vi.spyOn(embeddedAgentLog, "warn").mockImplementation(() => {
++      throw new Error("diagnostic logger unavailable");
++    });
++    const { harness, run } = startThreadWithHarness(500);
++    const rejected = expect(run).rejects.toBeInstanceOf(AgentHarnessPreflightError);
++    await waitForRequest(harness, "initialize");
++    await vi.advanceTimersByTimeAsync(500);
++    await rejected;
++    expect(warn).toHaveBeenCalledOnce();
++    expect(harness.stdinDestroyed).toBe(true);
++  });
+ });
+diff --git a/extensions/codex/src/app-server/attempt-startup.ts b/extensions/codex/src/app-server/attempt-startup.ts
+index b049e9f43aba0e50589e6e5ec79c1612af59a39b..35655db5225d8e6e85430a4af815b0e44829546d 100644
+--- a/extensions/codex/src/app-server/attempt-startup.ts
++++ b/extensions/codex/src/app-server/attempt-startup.ts
+@@ -18,7 +18,11 @@ import {
+ } from "./attempt-client-cleanup.js";
+ import { buildCodexPluginThreadConfigEligibilityLogData } from "./attempt-diagnostics.js";
+ import { verifyStartupArtifact } from "./attempt-runtime-artifact.js";
+-import { CodexAppServerStartupError, withCodexStartupTimeout } from "./attempt-timeouts.js";
++import {
++  CodexAppServerStartupError,
++  isCodexAppServerStartupError,
++  withCodexStartupTimeout,
++} from "./attempt-timeouts.js";
+ import { ensureCodexAppServerClientRuntime } from "./client-runtime.js";
+ import { isCodexAppServerConnectionClosedError, type CodexAppServerClient } from "./client.js";
+ import { startCodexComputerUseHealthMonitor } from "./computer-use-health.js";
+@@ -61,6 +65,7 @@ import {
+   readCodexAppServerClientDesktopGenerationFingerprint,
+   releaseLeasedSharedCodexAppServerClient,
+   retireSharedCodexAppServerClientIfCurrent,
++  type CodexAppServerAcquireObservation,
+   type CodexAppServerClientOptions,
+   type CodexAppServerClientFactory,
+ } from "./shared-client.js";
+@@ -144,6 +149,17 @@ export async function startCodexAttemptThread(params: {
+   let releaseSharedClientLease: (() => void) | undefined;
+   let startupClientForAbandonedRequestCleanup: CodexAppServerClient | undefined;
+   let releaseStartupResourcesOnTimeout: (() => Promise<void>) | undefined;
++  let startupDiagnostics: {
++    stage:
++      | "prepare"
++      | "acquire-client"
++      | "runtime-artifact"
++      | "computer-use"
++      | "sandbox"
++      | "thread-lifecycle";
++    acquireLastObservedBoundary?: CodexAppServerAcquireObservation["boundary"];
++    acquireBoundaryBeforeCleanup?: CodexAppServerAcquireObservation["boundary"];
++  } = { stage: "prepare" };
+   const startupAbandonController = new AbortController();
+   const abandonStartupAcquire = () => startupAbandonController.abort();
+   params.signal.addEventListener("abort", abandonStartupAcquire, { once: true });
+@@ -152,6 +168,12 @@ export async function startCodexAttemptThread(params: {
+       timeoutMs: params.startupTimeoutMs,
+       signal: params.signal,
+       onTimeout: async () => {
++        const snapshot = { ...startupDiagnostics, timeoutMs: params.startupTimeoutMs };
++        try {
++          embeddedAgentLog.warn("codex app-server startup timed out", snapshot);
++        } catch {
++          // Diagnostics must not prevent cancellation or resource cleanup.
++        }
+         startupAbandonController.abort();
+         await params.onStartupTimeout();
+         await releaseStartupResourcesOnTimeout?.();
+@@ -193,6 +215,8 @@ export async function startCodexAttemptThread(params: {
+ 
+         let attemptedClient: CodexAppServerClient | undefined;
+         const startupAttempt = async () => {
++          const diagnostics: typeof startupDiagnostics = { stage: "acquire-client" };
++          startupDiagnostics = diagnostics;
+           let startupClientLease: (() => void) | undefined;
+           let startupClient: CodexAppServerClient | undefined;
+           let startupAttemptError: unknown;
+@@ -205,6 +229,22 @@ export async function startCodexAttemptThread(params: {
+             }
+             startupClient = await params.attemptClientFactory({
+               ...params.clientOptions,
++              onAcquireObservation: (observation) => {
++                if (observation.boundary === "cleanup") {
++                  if (diagnostics.acquireLastObservedBoundary !== "cleanup") {
++                    diagnostics.acquireBoundaryBeforeCleanup =
++                      diagnostics.acquireLastObservedBoundary;
++                  }
++                } else {
++                  delete diagnostics.acquireBoundaryBeforeCleanup;
++                }
++                diagnostics.acquireLastObservedBoundary = observation.boundary;
++                try {
++                  params.clientOptions.onAcquireObservation?.(observation);
++                } catch {
++                  // Optional observers cannot invalidate startup.
++                }
++              },
+               // Process startup retains its synchronous admission contract. Ordinary
+               // native requests use the retained worker authority at wire admission.
+               assertCurrent: () => {
+@@ -247,6 +287,7 @@ export async function startCodexAttemptThread(params: {
+             if (startupAbandonController.signal.aborted) {
+               throw new CodexAppServerStartupError("aborted");
+             }
++            diagnostics.stage = "runtime-artifact";
+             const runtimeArtifact = await verifyStartupArtifact({
+               client: activeStartupClient,
+               startOptions: params.appServer.start,
+@@ -269,6 +310,7 @@ export async function startCodexAttemptThread(params: {
+             let computerUseTools: string[] = [];
+             let computerUseConfig = params.computerUseConfig;
+             try {
++              diagnostics.stage = "computer-use";
+               const computerUseStatus = await ensureCodexComputerUse({
+                 client: activeStartupClient,
+                 pluginConfig: params.pluginConfig,
+@@ -349,6 +391,7 @@ export async function startCodexAttemptThread(params: {
+                 nativeToolSurfaceEnabled: params.nativeToolSurfaceEnabled,
+                 sandboxExecServerEnabled: params.sandboxExecServerEnabled,
+               });
++              diagnostics.stage = "sandbox";
+               startupSandboxEnvironment = sandboxEnvironmentRequired
+                 ? await ensureCodexSandboxExecServerEnvironment({
+                     client: activeStartupClient,
+@@ -470,6 +513,7 @@ export async function startCodexAttemptThread(params: {
+                 }),
+               }) satisfies Parameters<typeof startOrResumeThread>[0];
+             try {
++              diagnostics.stage = "thread-lifecycle";
+               const startupThread = await startOrResumeThread(
+                 buildThreadLifecycleParams(startupAbandonController.signal, reserveStartupThread),
+               );
+@@ -669,6 +713,18 @@ export async function startCodexAttemptThread(params: {
+       await closeCodexStartupClientBestEffort(startupClientForAbandonedRequestCleanup);
+       startupClientForAbandonedRequestCleanup = undefined;
+     }
++    if (isCodexAppServerStartupError(error, "timed_out")) {
++      // Cleanup may outlive the deadline. Caller cancellation still wins over
++      // fallback; the attempt-local signal was already aborted by the timeout.
++      params.buildAttemptParams().abortSignal?.throwIfAborted();
++      // Switching models cannot repair this harness's failed startup. Keep
++      // provider request timeouts and explicit cancellation on their own paths.
++      throw new AgentHarnessPreflightError(formatErrorMessage(error), {
++        cause: error,
++        scope: "harness",
++        userMessage: "Codex could not finish starting. Check the runtime before retrying.",
++      });
++    }
+     throw error;
+   } finally {
+     params.signal.removeEventListener("abort", abandonStartupAcquire);

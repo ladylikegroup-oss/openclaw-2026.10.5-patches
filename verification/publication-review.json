@@ -1,0 +1,16 @@
+{
+  "independentReviewScope": "Frozen product source diff, 32 final source/test snapshots, five patch files, exact Codex package, and accompanying MIT license",
+  "sourceFileCount": 32,
+  "patchFamilyCount": 4,
+  "codexArchiveRegularFileCount": 177,
+  "sourceCoverageComplete": true,
+  "confirmedPrivateFindings": 0,
+  "unresolvedCandidates": 0,
+  "archiveSafetyFindings": 0,
+  "archiveOwnerMetadataFindings": 0,
+  "codexArchiveRepacked": false,
+  "requiresAccompanyingLicense": true,
+  "licenseIncludedInRepositoryAndRelease": true,
+  "additionalDocumentationReview": "README, VALIDATION, NOTICE and this metadata are newly authored public summaries; private operational receipts are excluded.",
+  "limitations": "Static review cannot prove the absence of unknown secrets. It does not constitute a full product build or functional regression run."
+}

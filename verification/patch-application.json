@@ -1,0 +1,32 @@
+{
+  "productCodeExecuted": false,
+  "dependencyInstallPerformed": false,
+  "checks": [
+    {
+      "patch": "0001-subagent-lifecycle-and-delivery.patch",
+      "applyCheck": true,
+      "resultTree": "97d7daf598162ecefe68847f2eb11122171979d4",
+      "matchesCommit": "a02d409a4c751ecd83239ed71aae948d1c868bcd"
+    },
+    {
+      "patch": "0002-codex-startup-containment.patch",
+      "applyCheck": true,
+      "resultTree": "850176b90d90121c8181a68c67a9e501b07b8c8f",
+      "matchesCommit": null
+    },
+    {
+      "patch": "0003-startup-stop.patch",
+      "applyCheck": true,
+      "resultTree": "f2ecf18959968abacd7243ed145b568674c2759d",
+      "matchesCommit": "1e8c96e4053e4673fecf1af5468e7dd12361aea5"
+    },
+    {
+      "patch": "0004-readonly-status.patch",
+      "applyCheck": true,
+      "resultTree": "6dbd86ebfb30a8f064c35b850a2e6a0d4f66d11a",
+      "matchesCommit": "964c4c5d993f4cecc6114c2bf8f6ead5d38ba763"
+    }
+  ],
+  "combinedResultTree": "6dbd86ebfb30a8f064c35b850a2e6a0d4f66d11a",
+  "sourceFilesVerified": 32
+}

@@ -1,0 +1,320 @@
+{
+  "project": "OpenClaw",
+  "version": "2026.10.5",
+  "upstreamBase": "1b58cb9a1b4f4353e1add63c8506db4d890962e8",
+  "upstreamBaseTree": "a138559698570e238395121723a773106ac33f8c",
+  "corePatchBase": "a02d409a4c751ecd83239ed71aae948d1c868bcd",
+  "sourceHead": "964c4c5d993f4cecc6114c2bf8f6ead5d38ba763",
+  "sourceHeadTree": "6dbd86ebfb30a8f064c35b850a2e6a0d4f66d11a",
+  "license": "MIT",
+  "patchFamilies": [
+    {
+      "id": "subagent",
+      "file": "patches/0001-subagent-lifecycle-and-delivery.patch",
+      "sha256": "0d11d93db220c4cd14d351d4d30124a7c89d12ed0faaa84673d6701f47f238d7",
+      "paths": [
+        "src/agents/agent-command-recovery-owner.ts",
+        "src/agents/agent-command.peer-followup.test.ts",
+        "src/agents/bash-tools.exec-authorization.integration.test.ts",
+        "src/agents/subagents/announce/subagent-announce.requester-settle-admission.test.ts",
+        "src/agents/subagents/announce/subagent-announce.requester-settle-results.test.ts",
+        "src/agents/subagents/announce/subagent-announce.requester-settle-state.ts",
+        "src/agents/subagents/announce/subagent-announce.requester-settle-wake.test.ts",
+        "src/agents/subagents/announce/subagent-announce.requester-settle-wake.ts",
+        "src/agents/subagents/registry/subagent-registry.types.ts",
+        "src/agents/subagents/registry/subagent-requester-settle-identity.test.ts",
+        "src/agents/subagents/registry/subagent-requester-settle-identity.ts",
+        "src/agents/worktrees/service.apfs.test.ts",
+        "src/auto-reply/reply/reply-turn-admission.recovery.test.ts",
+        "src/infra/exec-approvals-schema-admission.test.ts",
+        "src/infra/git-exec.settled.test.ts",
+        "src/infra/update-check.test.ts",
+        "src/infra/widearea-dns.test.ts",
+        "src/process/supervisor/service-child-relay-host.startup.test.ts",
+        "src/process/supervisor/service-child-relay-host.test.ts",
+        "src/process/supervisor/service-child-relay-host.ts",
+        "src/state/openclaw-state-db-read-connection.ts",
+        "test/vitest/vitest.agents-paths.mjs",
+        "test/vitest/vitest.database-worker-core-paths.mjs"
+      ],
+      "status": "Source for the deployed a02d409 core; prior public patch collection."
+    },
+    {
+      "id": "codex-startup",
+      "file": "patches/0002-codex-startup-containment.patch",
+      "sha256": "a23eb6690f7f69629d87326df9706a7dc698e5a435120a812d58ebef08ec5aed",
+      "paths": [
+        "extensions/codex/src/app-server/attempt-startup.test-support.ts",
+        "extensions/codex/src/app-server/attempt-startup.test.ts",
+        "extensions/codex/src/app-server/attempt-startup.ts"
+      ],
+      "status": "Plugin package deployed and original-channel operator-origin reply/continuation verified on 2026-11-17; initiating stall cause remains unknown."
+    },
+    {
+      "id": "startup-stop",
+      "file": "patches/0003-startup-stop.patch",
+      "sha256": "b9a7129cfe5456b2c691353f2001eae24e33667cda56d180909a54e95382e892",
+      "paths": [
+        "src/gateway/server-methods/sessions-abort-reply.ts",
+        "src/gateway/server-methods/sessions-abort.ts",
+        "src/gateway/server-methods/sessions.abort-startup.test.ts"
+      ],
+      "status": "Source and regression tests only; not deployed in the retained a02d409 core."
+    },
+    {
+      "id": "readonly-status",
+      "file": "patches/0004-readonly-status.patch",
+      "sha256": "349c571f4e73be16daa6a5ec1ab900177970eba44f08aead98370278ccf70be3",
+      "paths": [
+        "src/auto-reply/reply/model-selection.ts",
+        "src/plugin-sdk/command-status.readonly.test.ts",
+        "src/plugin-sdk/command-status.runtime.ts"
+      ],
+      "status": "Source counterpart of retained local read-only guards plus regression tests; combined core build was not completed."
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": "extensions/codex/src/app-server/attempt-startup.test-support.ts",
+      "snapshot": "source/extensions/codex/src/app-server/attempt-startup.test-support.ts",
+      "sha256": "328737a39bca4eb97ca801d234f1423341c24a1b25f9bcf48f96c940d7410cab",
+      "bytes": 10376,
+      "gitMode": "100644"
+    },
+    {
+      "path": "extensions/codex/src/app-server/attempt-startup.test.ts",
+      "snapshot": "source/extensions/codex/src/app-server/attempt-startup.test.ts",
+      "sha256": "cab9900bdb617f25127f297472535fb22a34dd53a448b3e775ff97d025343379",
+      "bytes": 40484,
+      "gitMode": "100644"
+    },
+    {
+      "path": "extensions/codex/src/app-server/attempt-startup.ts",
+      "snapshot": "source/extensions/codex/src/app-server/attempt-startup.ts",
+      "sha256": "beeba267f1b70b6a8acb863f83970e574e5cf80cc4583883c5ec2a97627e9c4f",
+      "bytes": 34933,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/agent-command-recovery-owner.ts",
+      "snapshot": "source/src/agents/agent-command-recovery-owner.ts",
+      "sha256": "d2849446d5c3eb9f0f87e1d9202b6aefb397bd048717d4ef4b66c35a2d1736bf",
+      "bytes": 13693,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/agent-command.peer-followup.test.ts",
+      "snapshot": "source/src/agents/agent-command.peer-followup.test.ts",
+      "sha256": "a897ad91e9d8cb3ed6398862f948627548ac587de8f452735f9a53272ca87446",
+      "bytes": 6671,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/bash-tools.exec-authorization.integration.test.ts",
+      "snapshot": "source/src/agents/bash-tools.exec-authorization.integration.test.ts",
+      "sha256": "fa27127b5ab6598b4439a70be717b7f4e2aa771269c05fd0016c6ceab1de74c1",
+      "bytes": 17714,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/subagents/announce/subagent-announce.requester-settle-admission.test.ts",
+      "snapshot": "source/src/agents/subagents/announce/subagent-announce.requester-settle-admission.test.ts",
+      "sha256": "651188139acae61c342357eaba45dc3b11c41a1c1a1eceba6094741e541834a7",
+      "bytes": 13957,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/subagents/announce/subagent-announce.requester-settle-results.test.ts",
+      "snapshot": "source/src/agents/subagents/announce/subagent-announce.requester-settle-results.test.ts",
+      "sha256": "f9c1a15d3d9e2a417db781bd4dfc17b7e8b38821f989b0618a1cd79393de93d5",
+      "bytes": 6568,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/subagents/announce/subagent-announce.requester-settle-state.ts",
+      "snapshot": "source/src/agents/subagents/announce/subagent-announce.requester-settle-state.ts",
+      "sha256": "d03618d23fcfda46de25f097ad18b8ef5fbabe219e556a5efc5ddb3efe6835ec",
+      "bytes": 8176,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/subagents/announce/subagent-announce.requester-settle-wake.test.ts",
+      "snapshot": "source/src/agents/subagents/announce/subagent-announce.requester-settle-wake.test.ts",
+      "sha256": "a806a5398eb2099e18eb5cebab1ee73e10b1f54470ec8f4457a5e596d640cfde",
+      "bytes": 38860,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/subagents/announce/subagent-announce.requester-settle-wake.ts",
+      "snapshot": "source/src/agents/subagents/announce/subagent-announce.requester-settle-wake.ts",
+      "sha256": "101a3a1691f87dc7da285e8b38fde2dad2881446827cc3d6c8908774d4f282d6",
+      "bytes": 31106,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/subagents/registry/subagent-registry.types.ts",
+      "snapshot": "source/src/agents/subagents/registry/subagent-registry.types.ts",
+      "sha256": "5a395e443f3c03665c627d2a2ff63d32a84b9e2f0368a41be27b60818e3d9951",
+      "bytes": 11482,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/subagents/registry/subagent-requester-settle-identity.test.ts",
+      "snapshot": "source/src/agents/subagents/registry/subagent-requester-settle-identity.test.ts",
+      "sha256": "28c37c506b4f2d402c81fcb2e4c844f87607e7b1c55b8525aafde4b2de095ba8",
+      "bytes": 8988,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/subagents/registry/subagent-requester-settle-identity.ts",
+      "snapshot": "source/src/agents/subagents/registry/subagent-requester-settle-identity.ts",
+      "sha256": "0fb4c533e87370bb47db98aefbab91cc0b6f6abf8a8b4f4acf47829ce88f8213",
+      "bytes": 12660,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/agents/worktrees/service.apfs.test.ts",
+      "snapshot": "source/src/agents/worktrees/service.apfs.test.ts",
+      "sha256": "c70902f847de79c9a8a7e8bd823d0db8fe44756d30280e9f78eac43c12ca84b4",
+      "bytes": 14528,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/auto-reply/reply/model-selection.ts",
+      "snapshot": "source/src/auto-reply/reply/model-selection.ts",
+      "sha256": "c03a4adbafa49c80eabdc568aa026cb5bd10fa8567418243ba3cdfbe03b4be64",
+      "bytes": 27031,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/auto-reply/reply/reply-turn-admission.recovery.test.ts",
+      "snapshot": "source/src/auto-reply/reply/reply-turn-admission.recovery.test.ts",
+      "sha256": "65c7c414aedb87c2394cafb91cd4de8f91f60918519119c0d28bdf52a4cb357e",
+      "bytes": 22646,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/gateway/server-methods/sessions-abort-reply.ts",
+      "snapshot": "source/src/gateway/server-methods/sessions-abort-reply.ts",
+      "sha256": "aa54ad6b6d52f1292e79df6d5f2b297bc566584e141b025d41f35e254dbe2ca2",
+      "bytes": 1099,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/gateway/server-methods/sessions-abort.ts",
+      "snapshot": "source/src/gateway/server-methods/sessions-abort.ts",
+      "sha256": "5364b3534ce5a608e5633b748395e04816a40ed2342f4d135b3daefcffe93c9a",
+      "bytes": 27158,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/gateway/server-methods/sessions.abort-startup.test.ts",
+      "snapshot": "source/src/gateway/server-methods/sessions.abort-startup.test.ts",
+      "sha256": "1b71df7001f3a203425d81585a511ba234b01e6d63510e6db1a670c205514083",
+      "bytes": 4886,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/infra/exec-approvals-schema-admission.test.ts",
+      "snapshot": "source/src/infra/exec-approvals-schema-admission.test.ts",
+      "sha256": "d0b4c351ed1c80fe5a1562bcdd43823f557e3aeac98420050c5d21ce76fb24c2",
+      "bytes": 8809,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/infra/git-exec.settled.test.ts",
+      "snapshot": "source/src/infra/git-exec.settled.test.ts",
+      "sha256": "4bc9d831577b735a55fef2061413fbf35661870be291a9f2c1df91eafdcee992",
+      "bytes": 4116,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/infra/update-check.test.ts",
+      "snapshot": "source/src/infra/update-check.test.ts",
+      "sha256": "4adda1c0a840c627032b2596dd9d999b4d265e544bd2be782afc67e32588a5ca",
+      "bytes": 32914,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/infra/widearea-dns.test.ts",
+      "snapshot": "source/src/infra/widearea-dns.test.ts",
+      "sha256": "2005217f5523b46c9fae60c7ef11c4170793113e49e2beb12a0db13d0fb5aedc",
+      "bytes": 7950,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/plugin-sdk/command-status.readonly.test.ts",
+      "snapshot": "source/src/plugin-sdk/command-status.readonly.test.ts",
+      "sha256": "7833b91e28a41ecc47a1c925a500b1f299c6383cb0d6ab497a1bcdb488b7f63c",
+      "bytes": 16319,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/plugin-sdk/command-status.runtime.ts",
+      "snapshot": "source/src/plugin-sdk/command-status.runtime.ts",
+      "sha256": "22dcb0d2a77f9314f57f290bcdcc002f610a6006130485db51a8ff783d9b4827",
+      "bytes": 6299,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/process/supervisor/service-child-relay-host.startup.test.ts",
+      "snapshot": "source/src/process/supervisor/service-child-relay-host.startup.test.ts",
+      "sha256": "a2dbaa235c1b788ef141e08d69261337df5d04e311d0dd3249a44e1ed121da76",
+      "bytes": 8415,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/process/supervisor/service-child-relay-host.test.ts",
+      "snapshot": "source/src/process/supervisor/service-child-relay-host.test.ts",
+      "sha256": "b0af60820be36019b889efbe7ef8d9f82d8e1ba262262ffc9e93ff6199b9b853",
+      "bytes": 30522,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/process/supervisor/service-child-relay-host.ts",
+      "snapshot": "source/src/process/supervisor/service-child-relay-host.ts",
+      "sha256": "ed4d9cb79302059c3f6f3ad033acae5cce2f5d3cac169715103abcdcce203395",
+      "bytes": 27472,
+      "gitMode": "100644"
+    },
+    {
+      "path": "src/state/openclaw-state-db-read-connection.ts",
+      "snapshot": "source/src/state/openclaw-state-db-read-connection.ts",
+      "sha256": "80ac5718f0267f1e084c5293eb4d6e1c8f1393e29fa5b9027342d1a65c197af6",
+      "bytes": 24467,
+      "gitMode": "100644"
+    },
+    {
+      "path": "test/vitest/vitest.agents-paths.mjs",
+      "snapshot": "source/test/vitest/vitest.agents-paths.mjs",
+      "sha256": "c52b4d9a4bb50ea083dff5ebb0c3bf240372050c496af44c277efa738ef932ef",
+      "bytes": 6151,
+      "gitMode": "100644"
+    },
+    {
+      "path": "test/vitest/vitest.database-worker-core-paths.mjs",
+      "snapshot": "source/test/vitest/vitest.database-worker-core-paths.mjs",
+      "sha256": "01ef325c55ea4eaa63f20c8fa84ada31287b87a9deee3c62affefb521a088cfd",
+      "bytes": 66746,
+      "gitMode": "100644"
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "openclaw-codex-2026.10.5.tgz",
+      "sha256": "8266ac10565572cf0f438b1a0f126dd451b4b4f8455b489e3374eca5749cd583",
+      "bytes": 791131,
+      "kind": "exact deployed Codex plugin npm-pack tarball",
+      "verifiedDeploymentDate": "2026-11-17"
+    }
+  ],
+  "limits": [
+    "No new full-core binary is published.",
+    "Prior regression/deployment evidence is historical; this publication verifies patch application and exact content.",
+    "No production failure injection or fresh human-mention ingress test."
+  ],
+  "combinedPatch": {
+    "file": "patches/all-from-official.patch",
+    "sha256": "953b0cff8b7354c2c61bf981fe9f5531398ddb9cb635f6eb42ceaae50b7d4150"
+  }
+}
